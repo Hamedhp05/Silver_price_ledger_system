@@ -145,10 +145,11 @@ def normalize_price_data(data: dict) -> dict:
     source = data.get("source")
     price = data.get("price")
     fetched_at = data.get("fetched_at")
-    currency = data.get("currency", "IRT")
 
     if not source:
-        raise NormalizationError("Missing source")
+        raise NormalizationError(
+            "Missing source"
+        )
 
     if price is None:
         raise NormalizationError(
@@ -164,10 +165,14 @@ def normalize_price_data(data: dict) -> dict:
 
     return {
         "source": source,
-        "price": _normalize_price(price, source),
+        "price": _normalize_price(
+            price,
+            source,
+        ),
         "fetched_at": _normalize_datetime(
             fetched_at,
             source,
         ),
-        "currency": currency,
     }
+
+

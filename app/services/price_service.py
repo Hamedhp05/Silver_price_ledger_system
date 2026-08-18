@@ -1,8 +1,6 @@
 from sqlalchemy.orm import Session
-from fastapi import Query
 from app.models.silver_price import PriceModel
 from app.models.sources import SourceModel
-from datetime import datetime
 
 
 def get_latest_price(db: Session):

@@ -25,7 +25,7 @@ ENV_PATH = BASE_DIR / ".env.development"
 load_dotenv(ENV_PATH)
 
 DATABASE_URL = os.getenv("SQLALCHEMY_DATABASE_URL")
-config = context.config
+
 
 if DATABASE_URL:
     config.set_main_option("sqlalchemy.url",DATABASE_URL)

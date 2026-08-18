@@ -7,6 +7,9 @@ scheduler = BackgroundScheduler()
 
 
 def start_scheduler():
+    if scheduler.running:
+        return
+
     scheduler.add_job(
         collect_prices,
         "interval",
@@ -16,9 +19,14 @@ def start_scheduler():
     )
 
     scheduler.start()
-    print("scheduler start")
+
+    print("Scheduler started")
 
 
 def stop_scheduler():
+    if not scheduler.running:
+        return
+
     scheduler.shutdown()
-    print("scheduler shutdown")
+
+    print("Scheduler stopped")
