@@ -1,9 +1,25 @@
+import logging
 from apscheduler.schedulers.background import BackgroundScheduler
-
 from app.collectors.price_collector import collect_prices
 
+logger = logging.getLogger(__name__)
 
 scheduler = BackgroundScheduler()
+
+def run_collection_job():
+    try:
+        logger.info("Scheduled price collection started.")
+
+        collect_prices()
+
+        logger.info(
+            "Scheduled price collection completed."
+        )
+
+    except Exception:
+        logger.exception(
+            "Scheduled price collection failed."
+        )
 
 
 def start_scheduler():
@@ -11,7 +27,7 @@ def start_scheduler():
         return
 
     scheduler.add_job(
-        collect_prices,
+        run_collection_job,
         "interval",
         hours=1,
         id="collect_silver_prices",
@@ -20,7 +36,7 @@ def start_scheduler():
 
     scheduler.start()
 
-    print("Scheduler started")
+    logger.info("Scheduler started.")
 
 
 def stop_scheduler():
@@ -29,4 +45,4 @@ def stop_scheduler():
 
     scheduler.shutdown()
 
-    print("Scheduler stopped")
+    logger.info("Scheduler stopped.")

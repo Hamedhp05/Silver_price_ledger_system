@@ -1,0 +1,24 @@
+services:
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: silver_postgres_test
+
+    environment:
+      POSTGRES_USER: silver_user
+      POSTGRES_PASSWORD: silver_password
+      POSTGRES_DB: silver_ledger_test
+
+    ports:
+      - "5434:5432"
+
+    volumes:
+      - silver_test_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U silver_user -d silver_ledger_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  silver_test_data:

@@ -1,3 +1,4 @@
+import logging
 from app.collectors.normalization import normalize_price_data
 from app.database.session import sessionlocal
 from app.models.silver_price import PriceModel
@@ -7,6 +8,8 @@ from app.scrapers.tgju import get_silver_price as get_tgju_price
 from app.scrapers.silfam import get_silver_price as get_silfam_price
 from app.scrapers.noghresea import get_silver_price as get_noghresea_price
 
+
+logger = logging.getLogger(__name__)
 
 SCRAPERS = {
     "tgju": get_tgju_price,
@@ -18,34 +21,42 @@ SCRAPERS = {
 def collect_prices():
     db = sessionlocal()
 
-    results = []
-
     try:
         for source_name, scraper in SCRAPERS.items():
-
             try:
-                source = db.query(SourceModel).filter_by(name=source_name,enabled=True).first()
+                source = (
+                    db.query(SourceModel)
+                    .filter_by(
+                        name=source_name,
+                        enabled=True,
+                    )
+                    .first()
+                )
 
                 if source is None:
-                    results.append({
-                        "source": source_name,
-                        "status": "skipped",
-                        "message": (
-                            "Source is disabled or not found.")
-                    })
+                    logger.warning(
+                        "Source '%s' is disabled or not found.",
+                        source_name,
+                    )
                     continue
 
                 raw_data = scraper()
                 data = normalize_price_data(raw_data)
 
-                existing_price = db.query(PriceModel).filter(PriceModel.source_id == source.id,PriceModel.fetched_at== data["fetched_at"],).first()
+                existing_price = (
+                    db.query(PriceModel)
+                    .filter_by(
+                        source_id=source.id,
+                        fetched_at=data["fetched_at"],
+                    )
+                    .first()
+                )
 
-                if existing_price is not None:
-                    results.append({
-                        "source": source_name,
-                        "status": "skipped",
-                        "message": "Duplicate price data.",
-                    })
+                if existing_price:
+                    logger.info(
+                        "Duplicate price skipped for '%s'.",
+                        source_name,
+                    )
                     continue
 
                 price = PriceModel(
@@ -57,21 +68,19 @@ def collect_prices():
                 db.add(price)
                 db.commit()
 
-                results.append({
-                    "source": source_name,
-                    "status": "success",
-                })
+                logger.info(
+                    "Price collected successfully from '%s'.",
+                    source_name,
+                )
 
             except Exception as exc:
                 db.rollback()
 
-                results.append({
-                    "source": source_name,
-                    "status": "failed",
-                    "message": str(exc),
-                })
-
-        return results
+                logger.error(
+                    "Failed to collect price from '%s': %s",
+                    source_name,
+                    exc,
+                )
 
     finally:
         db.close()

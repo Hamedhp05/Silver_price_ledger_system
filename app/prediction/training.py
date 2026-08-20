@@ -1,25 +1,24 @@
+import logging
 from pathlib import Path
-
 import joblib
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_squared_error
 from sqlalchemy.orm import Session
-
 from app.models.silver_price import PriceModel
 from app.models.sources import SourceModel
 
 
+logger = logging.getLogger(__name__)
+
+
 MODEL_DIR = Path(__file__).resolve().parent / "models"
 
-LINEAR_MODEL_PATH = (
-    MODEL_DIR / "linear_regression.pkl"
-)
+LINEAR_MODEL_PATH = (MODEL_DIR / "linear_regression.pkl")
 
-RANDOM_FOREST_MODEL_PATH = (
-    MODEL_DIR / "random_forest.pkl"
-)
+RANDOM_FOREST_MODEL_PATH = (MODEL_DIR / "random_forest.pkl")
 
 
 FEATURES = [
@@ -31,31 +30,12 @@ FEATURES = [
     "lag_3",
     "ma_3",
     "ma_5",
-    "price_change",
-]
+    "price_change"]
 
 
 def get_price_data(db: Session) -> pd.DataFrame:
-    data = (
-        db.query(
-            PriceModel.price,
-            PriceModel.fetched_at,
-            SourceModel.name.label("source"),
-        )
-        .join(
-            SourceModel,
-            PriceModel.source_id == SourceModel.id,
-        )
-        .filter(
-            SourceModel.name.in_(
-                ["tgju", "silfam", "noghresea"]
-            )
-        )
-        .order_by(
-            PriceModel.fetched_at.asc()
-        )
-        .all()
-    )
+    data = db.query(PriceModel.price,PriceModel.fetched_at,SourceModel.name.label("source")).join(SourceModel,PriceModel.source_id == SourceModel.id).filter(SourceModel.name.in_(["tgju", "silfam", "noghresea"])).order_by(PriceModel.fetched_at.asc()).all()
+
 
     if len(data) < 20:
         raise ValueError(
@@ -167,8 +147,7 @@ def prepare_training_data(
     )
 
     training_data["price_change"] = (
-        training_data["silver_price"]
-        .pct_change()
+        training_data["silver_price"].pct_change()
     )
 
     training_data["next_price"] = (
@@ -206,98 +185,102 @@ def evaluate_model(
 
 
 def train_models(db: Session):
+    logger.info("Model training started.")
 
-    df = get_price_data(db)
+    try:
+        df = get_price_data(db)
 
-    training_data = prepare_training_data(df)
+        training_data = prepare_training_data(df)
 
-    split_index = int(
-        len(training_data) * 0.8
-    )
+        split_index = int(
+            len(training_data) * 0.8
+        )
 
-    train_data = training_data.iloc[
-        :split_index
-    ]
+        train_data = training_data.iloc[
+            :split_index
+        ]
 
-    test_data = training_data.iloc[
-        split_index:
-    ]
+        test_data = training_data.iloc[
+            split_index:
+        ]
 
-    X_train = train_data[FEATURES]
-    y_train = train_data["next_price"]
+        X_train = train_data[FEATURES]
+        y_train = train_data["next_price"]
 
-    X_test = test_data[FEATURES]
-    y_test = test_data["next_price"]
+        X_test = test_data[FEATURES]
+        y_test = test_data["next_price"]
 
-    linear_model = LinearRegression()
+        linear_model = LinearRegression()
 
-    linear_model.fit(
-        X_train,
-        y_train,
-    )
+        linear_model.fit(
+            X_train,
+            y_train,
+        )
 
-    random_forest_model = RandomForestRegressor(
-        n_estimators=100,
-        random_state=42,
-    )
+        random_forest_model = RandomForestRegressor(
+            n_estimators=100,
+            random_state=42,
+        )
 
-    random_forest_model.fit(
-        X_train,
-        y_train,
-    )
+        random_forest_model.fit(
+            X_train,
+            y_train,
+        )
 
-    linear_mae, linear_rmse = evaluate_model(
-        linear_model,
-        X_test,
-        y_test,
-    )
+        linear_mae, linear_rmse = evaluate_model(
+            linear_model,
+            X_test,
+            y_test,
+        )
 
-    forest_mae, forest_rmse = evaluate_model(
-        random_forest_model,
-        X_test,
-        y_test,
-    )
+        forest_mae, forest_rmse = evaluate_model(
+            random_forest_model,
+            X_test,
+            y_test,
+        )
 
-    print(
-        "\nLinear Regression:"
-    )
-    print(
-        f"MAE: {linear_mae:.2f}"
-    )
-    print(
-        f"RMSE: {linear_rmse:.2f}"
-    )
+        logger.info(
+            "Linear Regression - MAE: %.2f, RMSE: %.2f",
+            linear_mae,
+            linear_rmse,
+        )
 
-    print(
-        "\nRandom Forest:"
-    )
-    print(
-        f"MAE: {forest_mae:.2f}"
-    )
-    print(
-        f"RMSE: {forest_rmse:.2f}"
-    )
+        logger.info(
+            "Random Forest - MAE: %.2f, RMSE: %.2f",
+            forest_mae,
+            forest_rmse,
+        )
 
-    MODEL_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+        MODEL_DIR.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
-    joblib.dump(
-        linear_model,
-        LINEAR_MODEL_PATH,
-    )
+        joblib.dump(
+            linear_model,
+            LINEAR_MODEL_PATH,
+        )
 
-    joblib.dump(
-        random_forest_model,
-        RANDOM_FOREST_MODEL_PATH,
-    )
+        joblib.dump(
+            random_forest_model,
+            RANDOM_FOREST_MODEL_PATH,
+        )
 
-    return {
-        "linear_model": linear_model,
-        "random_forest_model": random_forest_model,
-        "linear_mae": linear_mae,
-        "linear_rmse": linear_rmse,
-        "random_forest_mae": forest_mae,
-        "random_forest_rmse": forest_rmse,
-    }
+        logger.info(
+            "Models saved successfully."
+        )
+
+        return {
+            "linear_model": linear_model,
+            "random_forest_model": random_forest_model,
+            "linear_mae": linear_mae,
+            "linear_rmse": linear_rmse,
+            "random_forest_mae": forest_mae,
+            "random_forest_rmse": forest_rmse,
+        }
+
+    except Exception:
+        logger.exception(
+            "Model training failed."
+        )
+        raise

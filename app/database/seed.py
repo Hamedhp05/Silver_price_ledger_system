@@ -1,7 +1,10 @@
+import logging
 from sqlalchemy.orm import Session
-
 from app.database.session import sessionlocal
 from app.models.sources import SourceModel
+
+
+logger = logging.getLogger(__name__)
 
 
 sources = [
@@ -32,10 +35,18 @@ def seed_sources():
 
             if existing_source is None:
                 db.add(source)
+                logger.info("Source '%s' added.",source.name)
 
         db.commit()
 
+        logger.info("Sources seeded successfully.")
+
         return "Sources set successfully"
+
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to seed sources.")
+        raise
 
     finally:
         db.close()

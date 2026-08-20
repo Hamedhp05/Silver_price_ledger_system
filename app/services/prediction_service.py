@@ -1,16 +1,16 @@
+import logging
 import joblib
 import pandas as pd
 from sqlalchemy.orm import Session
-
 from app.models.prediction import PredictionModel
 from app.models.silver_price import PriceModel
 from app.models.sources import SourceModel
+from app.prediction.training import FEATURES
+from app.prediction.training import LINEAR_MODEL_PATH
+from app.prediction.training import RANDOM_FOREST_MODEL_PATH
 
-from app.prediction.training import (
-    FEATURES,
-    LINEAR_MODEL_PATH,
-    RANDOM_FOREST_MODEL_PATH,
-)
+
+logger = logging.getLogger(__name__)
 
 
 def load_model(model_path):
@@ -90,7 +90,7 @@ def prepare_prediction_features(
             [["fetched_at", "price"]]
             .rename(
                 columns={
-                    "price": source_name,
+                    "price": source_name
                 }
             )
             .sort_values("fetched_at")
@@ -175,57 +175,70 @@ def _predict(
     model_path,
     model_name: str,
 ):
+    try:
+        model = load_model(model_path)
 
-    model = load_model(model_path)
+        df = get_price_data(db)
 
-    df = get_price_data(db)
+        data = prepare_prediction_features(df)
 
-    data = prepare_prediction_features(df)
+        latest = data.iloc[-1]
 
-    latest = data.iloc[-1]
+        features = pd.DataFrame(
+            [[
+                latest["tgju"],
+                latest["silfam"],
+                latest["noghresea"],
+                latest["lag_1"],
+                latest["lag_2"],
+                latest["lag_3"],
+                latest["ma_3"],
+                latest["ma_5"],
+                latest["price_change"],
+            ]],
+            columns=FEATURES,
+        )
 
-    features = pd.DataFrame(
-        [[
-            latest["tgju"],
-            latest["silfam"],
-            latest["noghresea"],
-            latest["lag_1"],
-            latest["lag_2"],
-            latest["lag_3"],
-            latest["ma_3"],
-            latest["ma_5"],
-            latest["price_change"],
-        ]],
-        columns=FEATURES,
-    )
+        predicted_price = model.predict(
+            features
+        )[0]
 
-    predicted_price = model.predict(
-        features
-    )[0]
+        predicted_price = int(
+            round(predicted_price)
+        )
 
-    predicted_price = int(
-        round(predicted_price)
-    )
+        prediction = PredictionModel(
+            predicted_price=predicted_price,
+            model=model_name
+        )
 
-    prediction = PredictionModel(
-        predicted_price=predicted_price,
-        model=model_name,
-    )
+        db.add(prediction)
+        db.commit()
+        db.refresh(prediction)
 
-    db.add(prediction)
-    db.commit()
-    db.refresh(prediction)
+        logger.info(
+            "Prediction created using %s.",
+            model_name,
+        )
 
-    return {
-        "predicted_price": prediction.predicted_price,
-        "model": prediction.model,
-        "predicted_at": prediction.predicted_at,
-    }
+        return {
+            "predicted_price": prediction.predicted_price,
+            "model": prediction.model,
+            "predicted_at": prediction.predicted_at,
+        }
+
+    except Exception:
+        db.rollback()
+
+        logger.exception(
+            "Prediction failed using %s.",
+            model_name,
+        )
+
+        raise
 
 
-def predict_linear_regression(
-    db: Session,
-):
+def predict_linear_regression(db: Session):
     return _predict(
         db,
         LINEAR_MODEL_PATH,
@@ -233,9 +246,7 @@ def predict_linear_regression(
     )
 
 
-def predict_random_forest(
-    db: Session,
-):
+def predict_random_forest(db: Session):
     return _predict(
         db,
         RANDOM_FOREST_MODEL_PATH,

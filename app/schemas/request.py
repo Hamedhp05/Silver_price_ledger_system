@@ -12,8 +12,8 @@ class SourceEnum(str, Enum):
 
 
 class HistoricalRequestSchema(BaseModel):
-    start_date: datetime = Field(default_factory=lambda: datetime.now() - timedelta(days=1) , examples=["2026-08-16T12:00:00"])
-    end_date: datetime = Field(default_factory=datetime.now() , examples=["2026-08-17T12:00:00"])
+    start_date: datetime = datetime.now() - timedelta(days=1)
+    end_date: datetime = datetime.now()
     source: SourceEnum | None = None
     limit: int = Field(10, ge=1)
     
